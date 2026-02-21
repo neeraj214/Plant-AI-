@@ -20,8 +20,10 @@ venv/
 ENV/
 Pipfile.lock
 poetry.lock
-data/raw/
-data/processed/
+data/raw/*
+!data/raw/.gitkeep
+data/processed/*
+!data/processed/.gitkeep
 artifacts/
 models/
 *.h5
