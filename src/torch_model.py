@@ -3,9 +3,9 @@ import torch.nn as nn
 import timm
 
 class PlantClassifier(nn.Module):
-    def __init__(self, num_classes=38, backbone="efficientnetv2_rw_s", dropout=0.4):
+    def __init__(self, num_classes=38, backbone="efficientnetv2_rw_s", dropout=0.4, pretrained=True):
         super().__init__()
-        self.backbone = timm.create_model(backbone, pretrained=True)
+        self.backbone = timm.create_model(backbone, pretrained=pretrained)
         if hasattr(self.backbone, "classifier"):
             n = self.backbone.classifier.in_features
             self.backbone.classifier = nn.Sequential(
