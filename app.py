@@ -5,7 +5,6 @@ import uuid
 import asyncio
 import numpy as np
 import cv2
-import tensorflow as tf
 import torch
 from fastapi import FastAPI, UploadFile, File
 from fastapi.responses import FileResponse
@@ -30,7 +29,7 @@ if os.path.isfile(labels_path):
         inv = {v: k for k, v in lbls.items()}
         class_names = [inv[i] for i in range(len(inv))]
 
-BACKEND = os.getenv("MODEL_BACKEND", "tflite")
+BACKEND = os.getenv("MODEL_BACKEND", "torch")
 TFLITE_PATH = os.getenv("TFLITE_PATH", "models/model_quantized.tflite")
 TORCH_PATH = os.getenv("TORCH_PATH", "models/swa.pth")
 BACKBONE = os.getenv("BACKBONE", "efficientnetv2_rw_s")
@@ -44,6 +43,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 def load_tflite():
     global interpreter, input_details, output_details
+    import tensorflow as tf
     interpreter = tf.lite.Interpreter(model_path=TFLITE_PATH)
     interpreter.allocate_tensors()
     input_details = interpreter.get_input_details()
@@ -76,6 +76,7 @@ def preprocess_image(b):
     return img, x
 
 def predict_tflite(x):
+    import tensorflow as tf
     inp = input_details[0]
     out = output_details[0]
     scale, zp = inp["quantization"]
