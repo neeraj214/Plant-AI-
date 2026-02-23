@@ -38,3 +38,6 @@ __snapshots__/
 *.tmp
 *.temp
 ~$*
+node_modules/
+web/node_modules/
+web/dist/
