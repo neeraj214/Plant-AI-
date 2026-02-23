@@ -26,6 +26,20 @@ app.add_middleware(
 if os.path.isdir(os.path.join("web", "dist")):
     app.mount("/ui", StaticFiles(directory=os.path.join("web", "dist"), html=True), name="ui")
 
+@app.get("/")
+async def root():
+    return {
+        "status": "ok",
+        "message": "Plant AI API",
+        "links": {
+            "health": "/health",
+            "docs": "/docs",
+            "predict": "/predict",
+            "ui": "/ui" if os.path.isdir(os.path.join("web", "dist")) else None
+        },
+        "backend": BACKEND
+    }
+
 class_names = None
 labels_path = "data/labels.json"
 if os.path.isfile(labels_path):
