@@ -9,6 +9,7 @@ import torch
 from fastapi import FastAPI, UploadFile, File
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from src.torch_model import PlantClassifier
 from src.torch_cam import GradCAM, cam_to_numpy, overlay_heatmap
 
@@ -20,6 +21,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Serve built React app if present
+if os.path.isdir(os.path.join("web", "dist")):
+    app.mount("/ui", StaticFiles(directory=os.path.join("web", "dist"), html=True), name="ui")
 
 class_names = None
 labels_path = "data/labels.json"
