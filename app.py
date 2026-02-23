@@ -1,17 +1,26 @@
 import os
 import io
 import json
+import uuid
 import asyncio
 import numpy as np
 import cv2
 import tensorflow as tf
 import torch
 from fastapi import FastAPI, UploadFile, File
-from pydantic import BaseModel
-from src.data_utils import load_aliases
+from fastapi.responses import FileResponse
+from fastapi.middleware.cors import CORSMiddleware
 from src.torch_model import PlantClassifier
+from src.torch_cam import GradCAM, cam_to_numpy, overlay_heatmap
 
 app = FastAPI()
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 class_names = None
 labels_path = "data/labels.json"
@@ -93,6 +102,22 @@ def predict_torch(x):
         conf = float(torch.softmax(logits, dim=1)[0, p].item())
     return p, conf
 
+def gradcam_overlay_for_torch(x, class_idx):
+    # x: HWC float32 0..1, RGB resized 224x224
+    t = torch.from_numpy(x.transpose(2,0,1)).unsqueeze(0).to(device)
+    cam = GradCAM(torch_model)
+    with torch.no_grad():
+        pass
+    heat_t = cam(t, class_idx=torch.tensor([class_idx], device=device))
+    heat = cam_to_numpy(heat_t, (224,224))[0]
+    bgr = cv2.cvtColor((x*255).astype(np.uint8), cv2.COLOR_RGB2BGR)
+    overlay = overlay_heatmap(bgr, heat, alpha=0.45)
+    os.makedirs("temp", exist_ok=True)
+    name = f"{uuid.uuid4().hex}.png"
+    path = os.path.join("temp", name)
+    cv2.imwrite(path, cv2.cvtColor(overlay, cv2.COLOR_RGB2BGR))
+    return f"/overlay/{name}"
+
 @app.get("/health")
 async def health():
     return {"status": "ok", "backend": BACKEND}
@@ -110,4 +135,18 @@ async def predict(file: UploadFile = File(...)):
     else:
         return {"error": "no_model"}
     name = class_names[p] if class_names and 0 <= p < len(class_names) else str(p)
-    return {"class_index": p, "class_name": name, "confidence": conf}
+    resp = {"class_index": p, "class_name": name, "confidence": conf}
+    if BACKEND == "torch" and torch_model is not None:
+        try:
+            overlay_path = gradcam_overlay_for_torch(x, p)
+            resp["gradcam_overlay_path"] = overlay_path
+        except Exception:
+            pass
+    return resp
+
+@app.get("/overlay/{name}")
+async def overlay(name: str):
+    p = os.path.join("temp", name)
+    if not os.path.isfile(p):
+        return {"error": "not_found"}
+    return FileResponse(p, media_type="image/png")
