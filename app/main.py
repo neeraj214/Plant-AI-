@@ -48,7 +48,7 @@ if TORCH_AVAILABLE:
     if os.path.isfile(weights_path):
         try:
             n_classes = len(class_names) if class_names else 38
-            model = PlantClassifier(num_classes=n_classes)
+            model = PlantClassifier(num_classes=n_classes, pretrained=False)
             sd = torch.load(weights_path, map_location="cpu")
             model.load_state_dict(sd, strict=False)
             model = model.to(device).eval()
