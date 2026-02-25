@@ -8,6 +8,11 @@ import json
 import os
 TORCH_AVAILABLE = True
 CV2_AVAILABLE = True
+API_BASE = os.getenv("STREAMLIT_API_BASE", "http://localhost:8000")
+try:
+    import requests
+except Exception:
+    requests = None
 try:
     import torch
 except Exception:
@@ -62,7 +67,7 @@ with st.sidebar:
 uploaded = st.file_uploader("Upload a leaf image", type=["jpg", "jpeg", "png"])
 if uploaded is not None:
     image = Image.open(uploaded).convert("RGB")
-    st.image(image, caption="Input", use_column_width=True)
+    st.image(image, caption="Input", use_container_width=True)
     img_np = np.array(image)
     if CV2_AVAILABLE:
         x = cv2.resize(img_np, (224, 224))
@@ -75,7 +80,26 @@ if uploaded is not None:
     else:
         t_torch = None
     if model is None or not TORCH_AVAILABLE:
-        st.warning("Model backend unavailable. Provide models/swa.pth and ensure PyTorch is installed.")
+        if requests is not None:
+            try:
+                b = uploaded.getvalue()
+                r = requests.post(f"{API_BASE}/predict", files={"file": ("upload.png", b, "image/png")}, timeout=30)
+                if r.ok:
+                    data = r.json()
+                    if "error" in data:
+                        st.warning(f"API error: {data['error']}")
+                    else:
+                        st.subheader(f"Prediction: {data.get('class_name', data.get('class_index'))}  •  Confidence: {float(data.get('confidence', 0.0)):.2f}")
+                        p = data.get("gradcam_overlay_path")
+                        if isinstance(p, str):
+                            url = p if p.startswith("http") else f"{API_BASE}{p}"
+                            st.image(url, caption="Grad-CAM Overlay", use_container_width=True)
+                else:
+                    st.warning("API call failed")
+            except Exception:
+                st.warning("Model backend unavailable. Provide models/swa.pth and ensure PyTorch is installed, or run the API.")
+        else:
+            st.warning("Model backend unavailable. Provide models/swa.pth and ensure PyTorch is installed.")
     else:
         with torch.no_grad():
             logits = model(t_torch.to(device))
@@ -103,10 +127,10 @@ if uploaded is not None:
                 overlay = overlay_heatmap(cv2.cvtColor(x, cv2.COLOR_RGB2BGR), heat, alpha)
                 col1, col2 = st.columns(2)
                 with col1:
-                    st.image(x, caption="Preprocessed", use_column_width=True)
+                    st.image(x, caption="Preprocessed", use_container_width=True)
                 with col2:
-                    st.image(overlay, caption="Grad-CAM Overlay", use_column_width=True)
+                    st.image(overlay, caption="Grad-CAM Overlay", use_container_width=True)
             else:
-                st.image((heat*255).astype(np.uint8), caption="Grad-CAM", use_column_width=True)
+                st.image((heat*255).astype(np.uint8), caption="Grad-CAM", use_container_width=True)
         except Exception:
             st.info("Grad-CAM unavailable for this model.")
