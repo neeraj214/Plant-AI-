@@ -4,8 +4,6 @@ import cv2
 import numpy as np
 import torch
 from torch.utils.data import Dataset
-import albumentations as A
-from albumentations.pytorch import ToTensorV2
 
 def load_stats(path="data/stats.json"):
     if os.path.isfile(path):
@@ -23,6 +21,8 @@ def load_labels(path="data/labels.json"):
         return json.load(f)
 
 def build_transforms(split="train", mean=None, std=None):
+    import albumentations as A
+    from albumentations.pytorch import ToTensorV2
     if mean is None or std is None:
         mean, std = load_stats()
     if split == "train":
