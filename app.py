@@ -70,18 +70,17 @@ def load_tflite():
 
 def load_torch():
     global torch_model
-    if not os.path.isfile(TORCH_PATH):
-        return
     n = len(class_names) if class_names else 38
-    m = PlantClassifier(num_classes=n, backbone=BACKBONE)
-    sd = torch.load(TORCH_PATH, map_location=device)
-    m.load_state_dict(sd, strict=False)
+    m = PlantClassifier(num_classes=n, backbone=BACKBONE, pretrained=False)
+    if os.path.isfile(TORCH_PATH):
+        sd = torch.load(TORCH_PATH, map_location=device)
+        m.load_state_dict(sd, strict=False)
     m.to(device).eval()
     torch_model = m
 
 if BACKEND == "tflite" and os.path.isfile(TFLITE_PATH):
     load_tflite()
-elif os.path.isfile(TORCH_PATH):
+else:
     BACKEND = "torch"
     load_torch()
 
