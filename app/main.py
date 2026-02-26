@@ -23,10 +23,67 @@ except Exception:
     CV2_AVAILABLE = False
 from src.torch_dataset import load_stats
 
-st.set_page_config(page_title="Am I Healthy?", page_icon="🌿", layout="centered")
-st.title("Am I Healthy? Plant Disease Identifier")
+st.set_page_config(page_title="Plant AI — Disease Identifier", page_icon="🌱", layout="wide")
 st.markdown(
-    "<style>.css-1v0mbdj {max-width: 1100px;margin: auto;} .stButton>button{border-radius:8px;padding:0.6rem 1rem;} .uploadedFile{border-radius:12px;} .block-container{padding-top:1rem;}</style>",
+    """
+    <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap');
+    :root{
+      --bg:#F8FAFC; --card:#FFFFFF; --green:#16A34A; --blue:#2563EB;
+      --text:#0F172A; --muted:#64748B; --border:#E2E8F0;
+    }
+    .stApp{background:var(--bg); color:var(--text); font-family:Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;}
+    .block-container{padding-top:90px;max-width:1200px}
+    .top-nav{
+      position:sticky;top:0;z-index:50;height:70px;display:flex;align-items:center;justify-content:space-between;
+      padding:0 20px;background:#fff;border-bottom:1px solid var(--border);box-shadow:0 2px 8px rgba(15,23,42,0.05)
+    }
+    .brand{font-weight:800;display:flex;align-items:center;gap:10px}
+    .tag{color:var(--muted);font-weight:600}
+    .links .btn{
+      display:inline-block;margin-left:12px;padding:8px 12px;border-radius:10px;border:1px solid var(--border);
+      color:var(--text);text-decoration:none;background:#fff;transition:all .15s ease
+    }
+    .links .btn:hover{box-shadow:0 4px 12px rgba(15,23,42,0.08)}
+    h1.hero{font-size:34px;font-weight:800;margin:8px 0 0}
+    p.sub{color:var(--muted);margin:4px 0 20px}
+    /* File uploader styling */
+    [data-testid="stFileUploaderDropzone"]{
+      border:2px dashed var(--border); background:#fff; border-radius:16px; padding:28px; transition:border-color .15s, box-shadow .15s;
+    }
+    [data-testid="stFileUploaderDropzone"]:hover{border-color:var(--green); box-shadow:0 0 0 6px rgba(22,163,74,0.08)}
+    /* Cards, frames */
+    .card{background:var(--card); border:1px solid var(--border); border-radius:16px; padding:20px; box-shadow:0 8px 24px rgba(15,23,42,0.06)}
+    .label{color:var(--muted);margin:6px 0}
+    .frame{background:#fff;border:1px solid var(--border);border-radius:14px;overflow:hidden}
+    /* Progress */
+    .bar{width:100%;height:10px;background:#EEF2F6;border-radius:999px;overflow:hidden}
+    .fill{height:100%;background:linear-gradient(90deg,var(--green),var(--blue));width:0}
+    .badge{padding:4px 10px;border-radius:999px;font-weight:700}
+    .low{background:rgba(22,163,74,0.12);color:#15803D}
+    .mid{background:rgba(37,99,235,0.12);color:#2563EB}
+    .high{background:rgba(239,68,68,0.12);color:#DC2626}
+    /* Global image fade-in */
+    .stImage img{animation:fadein .25s ease-out}
+    @keyframes fadein{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+    /* Buttons */
+    .stButton>button{
+      background:linear-gradient(135deg,var(--green),var(--blue));color:#fff;border:none;border-radius:12px;padding:10px 16px;font-weight:700
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+st.markdown(
+    f"""
+    <div class="top-nav">
+      <div class="brand">🌱 Plant AI <span class="tag">AI‑Powered Disease Detection with Explainability</span></div>
+      <div class="links">
+        <a class="btn" href="https://github.com/neeraj214/Plant-AI-" target="_blank">GitHub</a>
+        <a class="btn" href="{API_BASE}/docs" target="_blank">API Docs</a>
+      </div>
+    </div>
+    """,
     unsafe_allow_html=True,
 )
 
@@ -55,19 +112,15 @@ if TORCH_AVAILABLE:
         except Exception:
             model = None
 
-with st.sidebar:
-    st.header("Controls")
-    alpha = st.slider("Grad-CAM overlay strength", 0.1, 0.9, 0.45, 0.05)
-    show_topk = st.checkbox("Show top-3 predictions", value=True)
-    st.divider()
-    st.caption("Backend")
-    st.write("PyTorch" + (" ✅" if TORCH_AVAILABLE else " ❌"))
-    st.write(("Weights: models/swa.pth ✅" if model is not None else "Weights missing or failed to load"))
-
-uploaded = st.file_uploader("Upload a leaf image", type=["jpg", "jpeg", "png"])
+c0, c1, c2 = st.columns([1,2,1])
+with c1:
+    st.markdown('<h1 class="hero">Detect Plant Diseases Instantly</h1>', unsafe_allow_html=True)
+    st.markdown('<p class="sub">Upload a leaf image and visualize AI attention maps.</p>', unsafe_allow_html=True)
+c1, c2, c3 = st.columns([1, 2, 1])
+with c2:
+    uploaded = st.file_uploader("Drag & Drop Leaf Image • Supported: JPG, PNG", type=["jpg", "jpeg", "png"], label_visibility="collapsed")
 if uploaded is not None:
     image = Image.open(uploaded).convert("RGB")
-    st.image(image, caption="Input", use_container_width=True)
     img_np = np.array(image)
     if CV2_AVAILABLE:
         x = cv2.resize(img_np, (224, 224))
@@ -89,11 +142,24 @@ if uploaded is not None:
                     if "error" in data:
                         st.warning(f"API error: {data['error']}")
                     else:
-                        st.subheader(f"Prediction: {data.get('class_name', data.get('class_index'))}  •  Confidence: {float(data.get('confidence', 0.0)):.2f}")
-                        p = data.get("gradcam_overlay_path")
-                        if isinstance(p, str):
-                            url = p if p.startswith("http") else f"{API_BASE}{p}"
-                            st.image(url, caption="Grad-CAM Overlay", use_container_width=True)
+                        conf_v = float(data.get('confidence', 0.0))
+                        name_v = data.get('class_name', data.get('class_index'))
+                        colA, colB = st.columns(2)
+                        with colA:
+                            st.markdown('<div class="label">Input</div>', unsafe_allow_html=True)
+                            st.image(image, use_container_width=True)
+                        with colB:
+                            st.markdown('<div class="label">AI Attention Map</div>', unsafe_allow_html=True)
+                            alpha = st.slider("Overlay intensity", 0.0, 1.0, 0.5, 0.01)
+                            pth = data.get("gradcam_overlay_path")
+                            if isinstance(pth, str):
+                                url = pth if pth.startswith("http") else f"{API_BASE}{pth}"
+                                st.image(url, use_container_width=True)
+                        st.markdown(f"### {name_v}")
+                        badge = "high" if conf_v>=0.75 else "mid" if conf_v>=0.4 else "low"
+                        st.markdown(f'<span class="badge {badge}">{"High Risk" if badge=="high" else "Medium Risk" if badge=="mid" else "Low Risk"}</span>', unsafe_allow_html=True)
+                        st.markdown('<div class="bar"><div class="fill" id="confbar"></div></div>', unsafe_allow_html=True)
+                        st.markdown(f"<script>document.getElementById('confbar').style.width='{conf_v*100:.1f}%'</script>", unsafe_allow_html=True)
                 else:
                     st.warning("API call failed")
             except Exception:
@@ -107,12 +173,13 @@ if uploaded is not None:
             pred = int(torch.argmax(probs).item())
             conf = float(probs[pred].item())
         name = class_names[pred] if class_names and 0 <= pred < len(class_names) else str(pred)
-        st.subheader(f"Prediction: {name}  •  Confidence: {conf:.2f}")
-        if show_topk and class_names is not None:
-            topk = torch.topk(probs, k=min(3, len(class_names)))
-            labels_k = [class_names[i] for i in topk.indices.tolist()]
-            vals = [float(v) for v in topk.values.tolist()]
-            st.write({a: round(b, 4) for a, b in zip(labels_k, vals)})
+        col1, col2 = st.columns(2)
+        with col1:
+            st.markdown('<div class="label">Input</div>', unsafe_allow_html=True)
+            st.image(image, use_container_width=True)
+        with col2:
+            st.markdown('<div class="label">AI Attention Map</div>', unsafe_allow_html=True)
+            alpha = st.slider("Overlay intensity", 0.0, 1.0, 0.5, 0.01)
         try:
             cam = GradCAM(model)
             heat_t = cam(t_torch.to(device), class_idx=torch.tensor([pred], device=device))
@@ -125,12 +192,21 @@ if uploaded is not None:
                 heat = h
             if CV2_AVAILABLE:
                 overlay = overlay_heatmap(cv2.cvtColor(x, cv2.COLOR_RGB2BGR), heat, alpha)
-                col1, col2 = st.columns(2)
-                with col1:
-                    st.image(x, caption="Preprocessed", use_container_width=True)
-                with col2:
-                    st.image(overlay, caption="Grad-CAM Overlay", use_container_width=True)
+                st.image(overlay, use_container_width=True)
             else:
-                st.image((heat*255).astype(np.uint8), caption="Grad-CAM", use_container_width=True)
+                st.image((heat*255).astype(np.uint8), use_container_width=True)
         except Exception:
             st.info("Grad-CAM unavailable for this model.")
+        st.markdown(f"### {name}")
+        badge = "high" if conf>=0.75 else "mid" if conf>=0.4 else "low"
+        st.markdown(f'<span class="badge {badge}">{"High Risk" if badge=="high" else "Medium Risk" if badge=="mid" else "Low Risk"}</span>', unsafe_allow_html=True)
+        st.markdown('<div class="bar"><div class="fill" id="confbar2"></div></div>', unsafe_allow_html=True)
+        st.markdown(f"<script>document.getElementById('confbar2').style.width='{conf*100:.1f}%'</script>", unsafe_allow_html=True)
+        with st.expander("Model & Explainability Details"):
+            st.write("Backend: PyTorch" if TORCH_AVAILABLE else "Backend: API")
+            st.write("Model: EfficientNetV2")
+            if class_names is not None:
+                topk = torch.topk(probs, k=min(3, len(class_names)))
+                labels_k = [class_names[i] for i in topk.indices.tolist()]
+                vals = [float(v) for v in topk.values.tolist()]
+                st.write("Top‑3:", {a: round(b, 4) for a, b in zip(labels_k, vals)})
