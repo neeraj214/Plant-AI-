@@ -22,20 +22,21 @@ try:
 except Exception:
     CV2_AVAILABLE = False
 from src.torch_dataset import load_stats
+from src.disease_info import get_disease_info
 
 st.set_page_config(page_title="Plant AI — Disease Identifier", page_icon="🌱", layout="wide")
 
-# Session state for history
+# Session state for history and current prediction
 if 'history' not in st.session_state:
     st.session_state.history = []
-if 'analyzed' not in st.session_state:
-    st.session_state.analyzed = False
+if 'prediction' not in st.session_state:
+    st.session_state.prediction = None
 if 'last_upload' not in st.session_state:
     st.session_state.last_upload = None
 
-# Reset analyzed state if a new file is uploaded
+# Reset prediction state if a new file is uploaded
 def on_upload_change():
-    st.session_state.analyzed = False
+    st.session_state.prediction = None
 
 # --- CUSTOM CSS (GLASSMORPHISM DARK THEME) ---
 st.markdown(
@@ -361,11 +362,75 @@ with col_left:
         # Check if it's a new upload to reset state
         if st.session_state.last_upload != uploaded.name:
             st.session_state.last_upload = uploaded.name
-            st.session_state.analyzed = False
+            st.session_state.prediction = None
             
         st.markdown('<div class="stButton">', unsafe_allow_html=True)
         if st.button("IDENTIFY DISEASE"):
-            st.session_state.analyzed = True
+            with st.spinner("AI is analyzing leaf patterns..."):
+                try:
+                    # Prediction Logic
+                    image = Image.open(uploaded).convert("RGB")
+                    img_np = np.array(image)
+                    
+                    if CV2_AVAILABLE:
+                        x = cv2.resize(img_np, (224, 224))
+                    else:
+                        x = np.array(Image.fromarray(img_np).resize((224,224)))
+                    
+                    mean, std = load_stats()
+                    t = (x.astype(np.float32)/255.0 - np.array(mean, dtype=np.float32)) / np.array(std, dtype=np.float32)
+                    
+                    name_v = "Unknown"
+                    conf_v = 0.0
+                    top3_data = None
+                    grad_overlay = None
+                    
+                    if model is not None and TORCH_AVAILABLE:
+                        t_torch = torch.from_numpy(t.transpose(2,0,1)).unsqueeze(0).to(device)
+                        with torch.no_grad():
+                            logits = model(t_torch)
+                            probs = torch.softmax(logits, dim=1)[0]
+                            pred = int(torch.argmax(probs).item())
+                            conf_v = float(probs[pred].item())
+                            name_v = class_names[pred] if class_names else f"Class {pred}"
+                            
+                            if class_names:
+                                pk = torch.topk(probs, k=min(3, len(class_names)))
+                                top3_data = {class_names[i]: float(v) for i, v in zip(pk.indices.tolist(), pk.values.tolist())}
+                        
+                        try:
+                            cam = GradCAM(model)
+                            heat_t = cam(t_torch, class_idx=torch.tensor([pred], device=device))
+                            heat = cam_to_numpy(heat_t, (224, 224))[0] if 'cam_to_numpy' in globals() else None
+                            if heat is not None and CV2_AVAILABLE:
+                                grad_overlay = overlay_heatmap(cv2.cvtColor(x, cv2.COLOR_RGB2BGR), heat, 0.5)
+                        except: pass
+                    elif requests is not None:
+                        r = requests.post(f"{API_BASE}/predict", files={"file": uploaded.getvalue()}, timeout=15)
+                        if r.ok:
+                            data = r.json()
+                            name_v = data.get('class_name', "Unknown")
+                            conf_v = float(data.get('confidence', 0.0))
+                            pth = data.get("gradcam_overlay_path")
+                            if pth:
+                                grad_overlay = pth if pth.startswith("http") else f"{API_BASE}{pth}"
+                    
+                    # Store everything in session state
+                    info = get_disease_info(name_v)
+                    st.session_state.prediction = {
+                        "name": name_v,
+                        "confidence": conf_v,
+                        "top3": top3_data,
+                        "overlay": grad_overlay,
+                        "description": info["description"],
+                        "treatment": info["treatment"],
+                        "image": image
+                    }
+                    print(f"DEBUG: Prediction successful - {name_v} ({conf_v:.2%})")
+                    st.success("Analysis Complete!")
+                except Exception as e:
+                    st.error(f"Model error: {str(e)}")
+                    print(f"DEBUG: Prediction failed - {str(e)}")
         st.markdown('</div>', unsafe_allow_html=True)
     else:
         st.markdown('<p class="info-text" style="text-align:center;">Select a clear image of the affected plant leaf for the most accurate AI diagnosis.</p>', unsafe_allow_html=True)
@@ -377,79 +442,28 @@ with col_right:
         </div>
     """, unsafe_allow_html=True)
     
-    if not st.session_state.analyzed or uploaded is None:
+    if st.session_state.prediction is None:
         st.markdown(f"""
             <div style="height: 300px; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(255,255,255,0.02); border-radius: 16px; border: 1px dashed var(--card-border);">
                 <span style="font-size: 48px; opacity: 0.2;">{"📈" if uploaded else "📊"}</span>
-                <p style="color: var(--text-secondary); margin-top: 16px;">{"Click Identify to see results" if uploaded else "Results will appear here after upload"}</p>
+                <p style="color: var(--text-secondary); margin-top: 16px;">{"Click Identify to see results" if uploaded else "Upload a leaf image to see diagnosis results."}</p>
             </div>
         """, unsafe_allow_html=True)
     else:
-        # (This part stays the same but is now inside the if analyzed)
-        image = Image.open(uploaded).convert("RGB")
-        img_np = np.array(image)
+        pred_data = st.session_state.prediction
         
-        # Preprocessing
-        if CV2_AVAILABLE:
-            x = cv2.resize(img_np, (224, 224))
-        else:
-            x = np.array(Image.fromarray(img_np).resize((224,224)))
-        
-        mean, std = load_stats()
-        t = (x.astype(np.float32)/255.0 - np.array(mean, dtype=np.float32)) / np.array(std, dtype=np.float32)
-        
-        # Prediction Logic
-        name_v = "Analyzing..."
-        conf_v = 0.0
-        top3_data = None
-        grad_overlay = None
-        
-        if model is not None and TORCH_AVAILABLE:
-            t_torch = torch.from_numpy(t.transpose(2,0,1)).unsqueeze(0).to(device)
-            with torch.no_grad():
-                logits = model(t_torch)
-                probs = torch.softmax(logits, dim=1)[0]
-                pred = int(torch.argmax(probs).item())
-                conf_v = float(probs[pred].item())
-                name_v = class_names[pred] if class_names else str(pred)
-                
-                # Top-3
-                if class_names:
-                    pk = torch.topk(probs, k=min(3, len(class_names)))
-                    top3_data = {class_names[i]: float(v) for i, v in zip(pk.indices.tolist(), pk.values.tolist())}
-            
-            # Grad-CAM
-            try:
-                cam = GradCAM(model)
-                heat_t = cam(t_torch, class_idx=torch.tensor([pred], device=device))
-                heat = cam_to_numpy(heat_t, (224, 224))[0] if 'cam_to_numpy' in globals() else None
-                if heat is not None and CV2_AVAILABLE:
-                    grad_overlay = overlay_heatmap(cv2.cvtColor(x, cv2.COLOR_RGB2BGR), heat, 0.5)
-            except: pass
-        elif requests is not None:
-            try:
-                r = requests.post(f"{API_BASE}/predict", files={"file": uploaded.getvalue()}, timeout=10)
-                if r.ok:
-                    data = r.json()
-                    name_v = data.get('class_name', "Unknown")
-                    conf_v = float(data.get('confidence', 0.0))
-                    pth = data.get("gradcam_overlay_path")
-                    if pth:
-                        grad_overlay = pth if pth.startswith("http") else f"{API_BASE}{pth}"
-            except: pass
-
         # Display Results Side-by-Side
         res_col1, res_col2 = st.columns(2)
         with res_col1:
             st.markdown('<p class="info-text" style="text-align:center; margin-bottom:8px;">ORIGINAL INPUT</p>', unsafe_allow_html=True)
             st.markdown('<div class="img-container">', unsafe_allow_html=True)
-            st.image(image, use_container_width=True)
+            st.image(pred_data["image"], use_container_width=True)
             st.markdown('</div>', unsafe_allow_html=True)
         with res_col2:
             st.markdown('<p class="info-text" style="text-align:center; margin-bottom:8px;">AI ATTENTION MAP</p>', unsafe_allow_html=True)
             st.markdown('<div class="img-container">', unsafe_allow_html=True)
-            if grad_overlay is not None:
-                st.image(grad_overlay, use_container_width=True)
+            if pred_data["overlay"] is not None:
+                st.image(pred_data["overlay"], use_container_width=True)
             else:
                 st.markdown('<div style="width:100%; height:100%; display:flex; align-items:center; justify-content:center; background:rgba(255,255,255,0.05);">No Map Available</div>', unsafe_allow_html=True)
             st.markdown('</div>', unsafe_allow_html=True)
@@ -457,7 +471,12 @@ with col_right:
         st.markdown('<p class="info-text" style="margin-top: 16px; text-align: center; font-size: 12px; opacity: 0.8;">The attention map highlights leaf regions prioritized by the EfficientNetV2 model for classification.</p>', unsafe_allow_html=True)
 
 # Diagnosis Section (Below the cards)
-if uploaded is not None and st.session_state.analyzed:
+if st.session_state.prediction is not None:
+    pred_data = st.session_state.prediction
+    name_v = pred_data["name"]
+    conf_v = pred_data["confidence"]
+    top3_data = pred_data["top3"]
+    
     # Determine severity
     sev_class = "severity-high" if conf_v > 0.8 else "severity-mid" if conf_v > 0.5 else "severity-low"
     sev_label = "High Confidence" if conf_v > 0.8 else "Moderate Risk" if conf_v > 0.5 else "Uncertain"
@@ -470,7 +489,12 @@ if uploaded is not None and st.session_state.analyzed:
     with diag_col1:
         st.markdown(f'<div class="severity-badge {sev_class}">{sev_label}</div>', unsafe_allow_html=True)
         st.markdown(f'<div class="diagnosis-name">{name_v}</div>', unsafe_allow_html=True)
-        st.markdown('<p class="info-text" style="margin-top: 8px; max-width: 90%;">Our deep learning model has identified markers consistent with the disease listed above. Please consult an agronomist for treatment protocols.</p>', unsafe_allow_html=True)
+        
+        st.markdown('<p class="info-text" style="margin: 16px 0 8px 0; font-weight: 700; color: var(--text-primary);">DESCRIPTION</p>', unsafe_allow_html=True)
+        st.markdown(f'<p class="info-text" style="margin-bottom: 16px;">{pred_data["description"]}</p>', unsafe_allow_html=True)
+        
+        st.markdown('<p class="info-text" style="margin: 0 0 8px 0; font-weight: 700; color: var(--accent);">RECOMMENDED TREATMENT</p>', unsafe_allow_html=True)
+        st.markdown(f'<p class="info-text" style="margin-bottom: 0;">{pred_data["treatment"]}</p>', unsafe_allow_html=True)
         
         # Add to history if not already there
         from datetime import datetime
