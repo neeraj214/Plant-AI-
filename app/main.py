@@ -182,16 +182,48 @@ st.markdown(
     }
     
     .diagnosis-name {
-      font-size: 32px;
+      font-size: 38px;
       font-weight: 800;
       color: var(--text-primary);
-      margin: 10px 0;
+      margin: 4px 0;
+      letter-spacing: -0.02em;
+      text-shadow: 0 0 20px rgba(255,255,255,0.1);
     }
     
     .confidence-text {
       color: var(--accent);
-      font-size: 24px;
+      font-size: 42px;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      text-shadow: 0 0 20px var(--accent-glow);
+    }
+    
+    .severity-badge {
+      padding: 6px 12px;
+      border-radius: 999px;
+      font-size: 12px;
       font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      display: inline-block;
+      margin-bottom: 12px;
+    }
+    .severity-low { background: rgba(234, 179, 8, 0.2); color: #EAB308; border: 1px solid rgba(234, 179, 8, 0.3); }
+    .severity-mid { background: rgba(249, 115, 22, 0.2); color: #F97316; border: 1px solid rgba(249, 115, 22, 0.3); }
+    .severity-high { background: rgba(239, 68, 68, 0.2); color: #EF4444; border: 1px solid rgba(239, 68, 68, 0.3); }
+
+    .img-container {
+      aspect-ratio: 1 / 1;
+      width: 100%;
+      border-radius: 12px;
+      overflow: hidden;
+      border: 1px solid var(--card-border);
+      background: rgba(0,0,0,0.2);
+    }
+    .img-container img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
     }
     
     .info-text {
@@ -409,25 +441,36 @@ with col_right:
         # Display Results Side-by-Side
         res_col1, res_col2 = st.columns(2)
         with res_col1:
-            st.markdown('<p class="info-text" style="text-align:center; margin-bottom:8px;">Original Image</p>', unsafe_allow_html=True)
+            st.markdown('<p class="info-text" style="text-align:center; margin-bottom:8px;">ORIGINAL INPUT</p>', unsafe_allow_html=True)
+            st.markdown('<div class="img-container">', unsafe_allow_html=True)
             st.image(image, use_container_width=True)
+            st.markdown('</div>', unsafe_allow_html=True)
         with res_col2:
-            st.markdown('<p class="info-text" style="text-align:center; margin-bottom:8px;">Grad-CAM Overlay</p>', unsafe_allow_html=True)
+            st.markdown('<p class="info-text" style="text-align:center; margin-bottom:8px;">AI ATTENTION MAP</p>', unsafe_allow_html=True)
+            st.markdown('<div class="img-container">', unsafe_allow_html=True)
             if grad_overlay is not None:
                 st.image(grad_overlay, use_container_width=True)
             else:
-                st.markdown('<div style="aspect-ratio:1; background:rgba(255,255,255,0.05); border-radius:8px; display:flex; align-items:center; justify-content:center;">No Map</div>', unsafe_allow_html=True)
+                st.markdown('<div style="width:100%; height:100%; display:flex; align-items:center; justify-content:center; background:rgba(255,255,255,0.05);">No Map Available</div>', unsafe_allow_html=True)
+            st.markdown('</div>', unsafe_allow_html=True)
         
-        st.markdown('<p class="info-text" style="margin-top: 16px;"><b>Note:</b> Red areas show where AI detected significant leaf damage or disease markers.</p>', unsafe_allow_html=True)
+        st.markdown('<p class="info-text" style="margin-top: 16px; text-align: center; font-size: 12px; opacity: 0.8;">The attention map highlights leaf regions prioritized by the EfficientNetV2 model for classification.</p>', unsafe_allow_html=True)
 
 # Diagnosis Section (Below the cards)
 if uploaded is not None and st.session_state.analyzed:
-    st.markdown('<div class="glass-card animate-in" style="margin-top: 20px;">', unsafe_allow_html=True)
-    diag_col1, diag_col2 = st.columns([2, 1])
+    # Determine severity
+    sev_class = "severity-high" if conf_v > 0.8 else "severity-mid" if conf_v > 0.5 else "severity-low"
+    sev_label = "High Confidence" if conf_v > 0.8 else "Moderate Risk" if conf_v > 0.5 else "Uncertain"
+
+    st.markdown('<div class="glass-card animate-in" style="margin-top: 24px;">', unsafe_allow_html=True)
+    st.markdown('<div style="border-bottom: 1px solid var(--card-border); margin-bottom: 24px; padding-bottom: 12px;"><p class="info-text" style="margin:0; font-weight:700; letter-spacing:0.1em; color:var(--accent);">AI SYSTEM DIAGNOSIS</p></div>', unsafe_allow_html=True)
+    
+    diag_col1, diag_col2 = st.columns([1.5, 1])
     
     with diag_col1:
-        st.markdown('<p class="info-text" style="margin-bottom:0;">AI DIAGNOSIS</p>', unsafe_allow_html=True)
+        st.markdown(f'<div class="severity-badge {sev_class}">{sev_label}</div>', unsafe_allow_html=True)
         st.markdown(f'<div class="diagnosis-name">{name_v}</div>', unsafe_allow_html=True)
+        st.markdown('<p class="info-text" style="margin-top: 8px; max-width: 90%;">Our deep learning model has identified markers consistent with the disease listed above. Please consult an agronomist for treatment protocols.</p>', unsafe_allow_html=True)
         
         # Add to history if not already there
         from datetime import datetime
@@ -440,31 +483,43 @@ if uploaded is not None and st.session_state.analyzed:
              st.session_state.history.append(history_entry)
              
     with diag_col2:
-        st.markdown('<p class="info-text" style="margin-bottom:0; text-align:right;">CONFIDENCE</p>', unsafe_allow_html=True)
-        st.markdown(f'<div class="confidence-text" style="text-align:right;">{conf_v*100:.1f}%</div>', unsafe_allow_html=True)
+        st.markdown('<div style="background: rgba(255,255,255,0.02); padding: 20px; border-radius: 16px; border: 1px solid var(--card-border);">', unsafe_allow_html=True)
+        st.markdown('<p class="info-text" style="margin-bottom:0; font-weight:600;">DETECTION CONFIDENCE</p>', unsafe_allow_html=True)
+        st.markdown(f'<div class="confidence-text">{conf_v*100:.2f}%</div>', unsafe_allow_html=True)
         st.progress(conf_v)
+        st.markdown('</div>', unsafe_allow_html=True)
 
     # Top-3 Visualization
     if top3_data:
-        st.markdown('<p class="info-text" style="margin: 20px 0 10px 0;">TOP PREDICTIONS</p>', unsafe_allow_html=True)
-        for label, prob in top3_data.items():
-            st.markdown(f"""
-                <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
-                    <span style="font-size:12px; color:var(--text-secondary);">{label}</span>
-                    <span style="font-size:12px; color:var(--accent); font-weight:600;">{prob*100:.1f}%</span>
-                </div>
-                <div style="height:4px; width:100%; background:rgba(255,255,255,0.05); border-radius:2px; margin-bottom:12px;">
-                    <div style="height:100%; width:{prob*100}%; background:var(--accent); border-radius:2px;"></div>
-                </div>
-            """, unsafe_allow_html=True)
+        st.markdown('<div style="margin-top: 32px;">', unsafe_allow_html=True)
+        st.markdown('<p class="info-text" style="margin-bottom: 16px; font-weight:700;">PROBABILITY DISTRIBUTION (TOP 3)</p>', unsafe_allow_html=True)
+        
+        t3_col1, t3_col2 = st.columns(2)
+        
+        items = list(top3_data.items())
+        for i, (label, prob) in enumerate(items):
+            target_col = t3_col1 if i < 2 else t3_col2
+            with target_col:
+                st.markdown(f"""
+                    <div style="margin-bottom: 16px;">
+                        <div style="display:flex; justify-content:space-between; margin-bottom:6px;">
+                            <span style="font-size:13px; font-weight:600; color:var(--text-primary);">{i+1}. {label}</span>
+                            <span style="font-size:13px; color:var(--accent); font-weight:700;">{prob*100:.2f}%</span>
+                        </div>
+                        <div style="height:6px; width:100%; background:rgba(255,255,255,0.05); border-radius:3px;">
+                            <div style="height:100%; width:{prob*100}%; background:var(--accent); border-radius:3px; box-shadow: 0 0 10px var(--accent-glow);"></div>
+                        </div>
+                    </div>
+                """, unsafe_allow_html=True)
+        st.markdown('</div>', unsafe_allow_html=True)
 
-    st.markdown('<div style="display: flex; gap: 12px; margin-top: 24px;">', unsafe_allow_html=True)
-    btn_col1, btn_col2, _ = st.columns([1, 1, 2])
+    st.markdown('<div style="display: flex; gap: 16px; margin-top: 32px; border-top: 1px solid var(--card-border); padding-top: 24px;">', unsafe_allow_html=True)
+    btn_col1, btn_col2, _ = st.columns([1, 1, 1.5])
     with btn_col1:
-        st.button("📄 DOWNLOAD REPORT")
+        st.button("📄 GENERATE PDF REPORT")
     with btn_col2:
         st.markdown('<div class="secondary-btn">', unsafe_allow_html=True)
-        st.button("🔗 SHARE DIAGNOSIS")
+        st.button("🔗 EXPORT DIAGNOSIS")
         st.markdown('</div>', unsafe_allow_html=True)
     st.markdown('</div>', unsafe_allow_html=True)
     
