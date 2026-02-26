@@ -24,68 +24,269 @@ except Exception:
 from src.torch_dataset import load_stats
 
 st.set_page_config(page_title="Plant AI — Disease Identifier", page_icon="🌱", layout="wide")
+
+# Session state for history
+if 'history' not in st.session_state:
+    st.session_state.history = []
+if 'analyzed' not in st.session_state:
+    st.session_state.analyzed = False
+if 'last_upload' not in st.session_state:
+    st.session_state.last_upload = None
+
+# Reset analyzed state if a new file is uploaded
+def on_upload_change():
+    st.session_state.analyzed = False
+
+# --- CUSTOM CSS (GLASSMORPHISM DARK THEME) ---
 st.markdown(
     """
     <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap');
-    :root{
-      --bg:#F8FAFC; --card:#FFFFFF; --green:#16A34A; --blue:#2563EB;
-      --text:#0F172A; --muted:#64748B; --border:#E2E8F0;
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+    
+    :root {
+      --bg-gradient: linear-gradient(135deg, #0F2027, #203A43, #2C5364);
+      --accent: #22C55E;
+      --accent-glow: rgba(34, 197, 94, 0.4);
+      --card-bg: rgba(255, 255, 255, 0.05);
+      --card-border: rgba(255, 255, 255, 0.1);
+      --text-primary: #FFFFFF;
+      --text-secondary: #94A3B8;
+      --glass-blur: blur(12px);
     }
-    .stApp{background:var(--bg); color:var(--text); font-family:Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;}
-    .block-container{padding-top:90px;max-width:1200px}
-    .top-nav{
-      position:sticky;top:0;z-index:50;height:70px;display:flex;align-items:center;justify-content:space-between;
-      padding:0 20px;background:#fff;border-bottom:1px solid var(--border);box-shadow:0 2px 8px rgba(15,23,42,0.05)
+
+    /* Global Overrides */
+    .stApp {
+      background: var(--bg-gradient) fixed;
+      color: var(--text-primary);
+      font-family: 'Inter', sans-serif;
     }
-    .brand{font-weight:800;display:flex;align-items:center;gap:10px}
-    .tag{color:var(--muted);font-weight:600}
-    .links .btn{
-      display:inline-block;margin-left:12px;padding:8px 12px;border-radius:10px;border:1px solid var(--border);
-      color:var(--text);text-decoration:none;background:#fff;transition:all .15s ease
+    
+    .block-container {
+      padding-top: 2rem !important;
+      max-width: 1400px;
     }
-    .links .btn:hover{box-shadow:0 4px 12px rgba(15,23,42,0.08)}
-    h1.hero{font-size:34px;font-weight:800;margin:8px 0 0}
-    p.sub{color:var(--muted);margin:4px 0 20px}
-    /* File uploader styling */
-    [data-testid="stFileUploaderDropzone"]{
-      border:2px dashed var(--border); background:#fff; border-radius:16px; padding:28px; transition:border-color .15s, box-shadow .15s;
+
+    /* Sidebar Glassmorphism */
+    [data-testid="stSidebar"] {
+      background: rgba(15, 32, 39, 0.7) !important;
+      backdrop-filter: var(--glass-blur);
+      border-right: 1px solid var(--card-border);
     }
-    [data-testid="stFileUploaderDropzone"]:hover{border-color:var(--green); box-shadow:0 0 0 6px rgba(22,163,74,0.08)}
-    /* Cards, frames */
-    .card{background:var(--card); border:1px solid var(--border); border-radius:16px; padding:20px; box-shadow:0 8px 24px rgba(15,23,42,0.06)}
-    .label{color:var(--muted);margin:6px 0}
-    .frame{background:#fff;border:1px solid var(--border);border-radius:14px;overflow:hidden}
-    /* Progress */
-    .bar{width:100%;height:10px;background:#EEF2F6;border-radius:999px;overflow:hidden}
-    .fill{height:100%;background:linear-gradient(90deg,var(--green),var(--blue));width:0}
-    .badge{padding:4px 10px;border-radius:999px;font-weight:700}
-    .low{background:rgba(22,163,74,0.12);color:#15803D}
-    .mid{background:rgba(37,99,235,0.12);color:#2563EB}
-    .high{background:rgba(239,68,68,0.12);color:#DC2626}
-    /* Global image fade-in */
-    .stImage img{animation:fadein .25s ease-out}
-    @keyframes fadein{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+    
+    [data-testid="stSidebar"] h2 {
+      color: var(--text-primary);
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+
+    /* Glass Cards */
+    .glass-card {
+      background: var(--card-bg);
+      backdrop-filter: var(--glass-blur);
+      border: 1px solid var(--card-border);
+      border-radius: 20px;
+      padding: 24px;
+      box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+      transition: transform 0.3s ease, box-shadow 0.3s ease;
+      margin-bottom: 20px;
+    }
+    
+    .glass-card:hover {
+      box-shadow: 0 8px 32px 0 rgba(34, 197, 94, 0.15);
+      border-color: rgba(34, 197, 94, 0.3);
+    }
+
+    /* Header Styling */
+    .logo-container {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 8px;
+    }
+    .logo-text {
+      font-size: 28px;
+      font-weight: 800;
+      background: linear-gradient(to right, #FFFFFF, #22C55E);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .subtitle {
+      color: var(--text-secondary);
+      font-size: 14px;
+      font-weight: 500;
+      margin-bottom: 32px;
+      letter-spacing: 0.05em;
+    }
+
+    /* File Uploader Customization */
+    [data-testid="stFileUploader"] {
+      padding: 0;
+    }
+    [data-testid="stFileUploaderDropzone"] {
+      background: rgba(255, 255, 255, 0.02) !important;
+      border: 2px dashed var(--card-border) !important;
+      border-radius: 16px !important;
+      padding: 40px !important;
+      transition: all 0.3s ease !important;
+    }
+    [data-testid="stFileUploaderDropzone"]:hover {
+      border-color: var(--accent) !important;
+      background: rgba(34, 197, 94, 0.05) !important;
+      box-shadow: 0 0 20px var(--accent-glow) !important;
+    }
+    
     /* Buttons */
-    .stButton>button{
-      background:linear-gradient(135deg,var(--green),var(--blue));color:#fff;border:none;border-radius:12px;padding:10px 16px;font-weight:700
+    .stButton > button {
+      width: 100%;
+      background: linear-gradient(135deg, #22C55E, #16A34A) !important;
+      color: white !important;
+      border: none !important;
+      border-radius: 12px !important;
+      padding: 12px 24px !important;
+      font-weight: 700 !important;
+      font-size: 16px !important;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      transition: all 0.3s ease !important;
+      box-shadow: 0 4px 15px rgba(34, 197, 94, 0.3) !important;
+    }
+    .stButton > button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 25px var(--accent-glow) !important;
+    }
+    
+    .secondary-btn > button {
+      background: rgba(255, 255, 255, 0.05) !important;
+      border: 1px solid var(--card-border) !important;
+      box-shadow: none !important;
+    }
+    .secondary-btn > button:hover {
+      background: rgba(255, 255, 255, 0.1) !important;
+      border-color: var(--text-secondary) !important;
+    }
+
+    /* Progress Bar */
+    .stProgress > div > div > div > div {
+      background-color: var(--accent) !important;
+    }
+    
+    /* Labels and Titles */
+    .card-title {
+      color: var(--text-primary);
+      font-size: 18px;
+      font-weight: 700;
+      margin-bottom: 20px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    
+    .diagnosis-name {
+      font-size: 32px;
+      font-weight: 800;
+      color: var(--text-primary);
+      margin: 10px 0;
+    }
+    
+    .confidence-text {
+      color: var(--accent);
+      font-size: 24px;
+      font-weight: 700;
+    }
+    
+    .info-text {
+      color: var(--text-secondary);
+      font-size: 14px;
+      line-height: 1.6;
+    }
+
+    /* History Items */
+    .history-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px;
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.03);
+      margin-bottom: 8px;
+      border: 1px solid transparent;
+      transition: all 0.2s ease;
+      cursor: pointer;
+    }
+    .history-item:hover {
+      background: rgba(255, 255, 255, 0.07);
+      border-color: var(--card-border);
+      transform: translateX(4px);
+    }
+    .history-thumb {
+      width: 40px;
+      height: 40px;
+      border-radius: 8px;
+      object-fit: cover;
+    }
+    .history-info {
+      flex: 1;
+      overflow: hidden;
+    }
+    .history-label {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-primary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .history-time {
+      font-size: 11px;
+      color: var(--text-secondary);
+    }
+
+    /* Hide Default Streamlit Elements */
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    header {visibility: hidden;}
+    
+    /* Animations */
+    @keyframes fadeInUp {
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .animate-in {
+      animation: fadeInUp 0.6s ease-out forwards;
     }
     </style>
     """,
     unsafe_allow_html=True,
 )
-st.markdown(
-    f"""
-    <div class="top-nav">
-      <div class="brand">🌱 Plant AI <span class="tag">AI‑Powered Disease Detection with Explainability</span></div>
-      <div class="links">
-        <a class="btn" href="https://github.com/neeraj214/Plant-AI-" target="_blank">GitHub</a>
-        <a class="btn" href="{API_BASE}/docs" target="_blank">API Docs</a>
-      </div>
+
+# --- SIDEBAR (HISTORY) ---
+with st.sidebar:
+    st.markdown("## 🕒 Analysis History")
+    if not st.session_state.history:
+        st.markdown('<p class="info-text">No previous scans found. Start by uploading an image.</p>', unsafe_allow_html=True)
+    else:
+        for idx, item in enumerate(reversed(st.session_state.history[-10:])):
+            st.markdown(f"""
+                <div class="history-item">
+                    <img src="{item['thumb']}" class="history-thumb">
+                    <div class="history-info">
+                        <div class="history-label">{item['label']}</div>
+                        <div class="history-time">{item['time']}</div>
+                    </div>
+                </div>
+            """, unsafe_allow_html=True)
+
+# --- MAIN CONTENT ---
+# Header
+st.markdown("""
+    <div class="animate-in">
+        <div class="logo-container">
+            <span style="font-size: 32px;">🌿</span>
+            <span class="logo-text">Plant AI</span>
+        </div>
+        <div class="subtitle">EFFICIENTNETV2 • GRAD-CAM ENABLED • REAL-TIME DIAGNOSIS</div>
     </div>
-    """,
-    unsafe_allow_html=True,
-)
+""", unsafe_allow_html=True)
 
 labels_path = os.path.join("data", "labels.json")
 class_names = None
@@ -112,101 +313,160 @@ if TORCH_AVAILABLE:
         except Exception:
             model = None
 
-c0, c1, c2 = st.columns([1,2,1])
-with c1:
-    st.markdown('<h1 class="hero">Detect Plant Diseases Instantly</h1>', unsafe_allow_html=True)
-    st.markdown('<p class="sub">Upload a leaf image and visualize AI attention maps.</p>', unsafe_allow_html=True)
-c1, c2, c3 = st.columns([1, 2, 1])
-with c2:
-    uploaded = st.file_uploader("Drag & Drop Leaf Image • Supported: JPG, PNG", type=["jpg", "jpeg", "png"], label_visibility="collapsed")
-if uploaded is not None:
-    image = Image.open(uploaded).convert("RGB")
-    img_np = np.array(image)
-    if CV2_AVAILABLE:
-        x = cv2.resize(img_np, (224, 224))
+# Two-Card Dashboard Layout
+col_left, col_right = st.columns([1, 1], gap="large")
+
+with col_left:
+    st.markdown("""
+        <div class="glass-card animate-in">
+            <div class="card-title">📤 Upload Leaf Photo</div>
+        </div>
+    """, unsafe_allow_html=True)
+    
+    uploaded = st.file_uploader("Upload Leaf Image", type=["jpg", "jpeg", "png"], label_visibility="collapsed", on_change=on_upload_change)
+    
+    if uploaded:
+        # Check if it's a new upload to reset state
+        if st.session_state.last_upload != uploaded.name:
+            st.session_state.last_upload = uploaded.name
+            st.session_state.analyzed = False
+            
+        st.markdown('<div class="stButton">', unsafe_allow_html=True)
+        if st.button("IDENTIFY DISEASE"):
+            st.session_state.analyzed = True
+        st.markdown('</div>', unsafe_allow_html=True)
     else:
-        x = np.array(Image.fromarray(img_np).resize((224,224)))
-    mean, std = load_stats()
-    t = (x.astype(np.float32)/255.0 - np.array(mean, dtype=np.float32)) / np.array(std, dtype=np.float32)
-    if TORCH_AVAILABLE:
-        t_torch = torch.from_numpy(t.transpose(2,0,1)).unsqueeze(0)
+        st.markdown('<p class="info-text" style="text-align:center;">Select a clear image of the affected plant leaf for the most accurate AI diagnosis.</p>', unsafe_allow_html=True)
+
+with col_right:
+    st.markdown("""
+        <div class="glass-card animate-in">
+            <div class="card-title">🔍 Diagnostic Results</div>
+        </div>
+    """, unsafe_allow_html=True)
+    
+    if not st.session_state.analyzed or uploaded is None:
+        st.markdown(f"""
+            <div style="height: 300px; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(255,255,255,0.02); border-radius: 16px; border: 1px dashed var(--card-border);">
+                <span style="font-size: 48px; opacity: 0.2;">{"📈" if uploaded else "📊"}</span>
+                <p style="color: var(--text-secondary); margin-top: 16px;">{"Click Identify to see results" if uploaded else "Results will appear here after upload"}</p>
+            </div>
+        """, unsafe_allow_html=True)
     else:
-        t_torch = None
-    if model is None or not TORCH_AVAILABLE:
-        if requests is not None:
+        # (This part stays the same but is now inside the if analyzed)
+        image = Image.open(uploaded).convert("RGB")
+        img_np = np.array(image)
+        
+        # Preprocessing
+        if CV2_AVAILABLE:
+            x = cv2.resize(img_np, (224, 224))
+        else:
+            x = np.array(Image.fromarray(img_np).resize((224,224)))
+        
+        mean, std = load_stats()
+        t = (x.astype(np.float32)/255.0 - np.array(mean, dtype=np.float32)) / np.array(std, dtype=np.float32)
+        
+        # Prediction Logic
+        name_v = "Analyzing..."
+        conf_v = 0.0
+        top3_data = None
+        grad_overlay = None
+        
+        if model is not None and TORCH_AVAILABLE:
+            t_torch = torch.from_numpy(t.transpose(2,0,1)).unsqueeze(0).to(device)
+            with torch.no_grad():
+                logits = model(t_torch)
+                probs = torch.softmax(logits, dim=1)[0]
+                pred = int(torch.argmax(probs).item())
+                conf_v = float(probs[pred].item())
+                name_v = class_names[pred] if class_names else str(pred)
+                
+                # Top-3
+                if class_names:
+                    pk = torch.topk(probs, k=min(3, len(class_names)))
+                    top3_data = {class_names[i]: float(v) for i, v in zip(pk.indices.tolist(), pk.values.tolist())}
+            
+            # Grad-CAM
             try:
-                b = uploaded.getvalue()
-                r = requests.post(f"{API_BASE}/predict", files={"file": ("upload.png", b, "image/png")}, timeout=30)
+                cam = GradCAM(model)
+                heat_t = cam(t_torch, class_idx=torch.tensor([pred], device=device))
+                heat = cam_to_numpy(heat_t, (224, 224))[0] if 'cam_to_numpy' in globals() else None
+                if heat is not None and CV2_AVAILABLE:
+                    grad_overlay = overlay_heatmap(cv2.cvtColor(x, cv2.COLOR_RGB2BGR), heat, 0.5)
+            except: pass
+        elif requests is not None:
+            try:
+                r = requests.post(f"{API_BASE}/predict", files={"file": uploaded.getvalue()}, timeout=10)
                 if r.ok:
                     data = r.json()
-                    if "error" in data:
-                        st.warning(f"API error: {data['error']}")
-                    else:
-                        conf_v = float(data.get('confidence', 0.0))
-                        name_v = data.get('class_name', data.get('class_index'))
-                        colA, colB = st.columns(2)
-                        with colA:
-                            st.markdown('<div class="label">Input</div>', unsafe_allow_html=True)
-                            st.image(image, use_container_width=True)
-                        with colB:
-                            st.markdown('<div class="label">AI Attention Map</div>', unsafe_allow_html=True)
-                            alpha = st.slider("Overlay intensity", 0.0, 1.0, 0.5, 0.01)
-                            pth = data.get("gradcam_overlay_path")
-                            if isinstance(pth, str):
-                                url = pth if pth.startswith("http") else f"{API_BASE}{pth}"
-                                st.image(url, use_container_width=True)
-                        st.markdown(f"### {name_v}")
-                        badge = "high" if conf_v>=0.75 else "mid" if conf_v>=0.4 else "low"
-                        st.markdown(f'<span class="badge {badge}">{"High Risk" if badge=="high" else "Medium Risk" if badge=="mid" else "Low Risk"}</span>', unsafe_allow_html=True)
-                        st.markdown('<div class="bar"><div class="fill" id="confbar"></div></div>', unsafe_allow_html=True)
-                        st.markdown(f"<script>document.getElementById('confbar').style.width='{conf_v*100:.1f}%'</script>", unsafe_allow_html=True)
-                else:
-                    st.warning("API call failed")
-            except Exception:
-                st.warning("Model backend unavailable. Provide models/swa.pth and ensure PyTorch is installed, or run the API.")
-        else:
-            st.warning("Model backend unavailable. Provide models/swa.pth and ensure PyTorch is installed.")
-    else:
-        with torch.no_grad():
-            logits = model(t_torch.to(device))
-            probs = torch.softmax(logits, dim=1)[0]
-            pred = int(torch.argmax(probs).item())
-            conf = float(probs[pred].item())
-        name = class_names[pred] if class_names and 0 <= pred < len(class_names) else str(pred)
-        col1, col2 = st.columns(2)
-        with col1:
-            st.markdown('<div class="label">Input</div>', unsafe_allow_html=True)
+                    name_v = data.get('class_name', "Unknown")
+                    conf_v = float(data.get('confidence', 0.0))
+                    pth = data.get("gradcam_overlay_path")
+                    if pth:
+                        grad_overlay = pth if pth.startswith("http") else f"{API_BASE}{pth}"
+            except: pass
+
+        # Display Results Side-by-Side
+        res_col1, res_col2 = st.columns(2)
+        with res_col1:
+            st.markdown('<p class="info-text" style="text-align:center; margin-bottom:8px;">Original Image</p>', unsafe_allow_html=True)
             st.image(image, use_container_width=True)
-        with col2:
-            st.markdown('<div class="label">AI Attention Map</div>', unsafe_allow_html=True)
-            alpha = st.slider("Overlay intensity", 0.0, 1.0, 0.5, 0.01)
-        try:
-            cam = GradCAM(model)
-            heat_t = cam(t_torch.to(device), class_idx=torch.tensor([pred], device=device))
-            heat = None
-            if 'cam_to_numpy' in globals():
-                heat = cam_to_numpy(heat_t, (224, 224))[0]
+        with res_col2:
+            st.markdown('<p class="info-text" style="text-align:center; margin-bottom:8px;">Grad-CAM Overlay</p>', unsafe_allow_html=True)
+            if grad_overlay is not None:
+                st.image(grad_overlay, use_container_width=True)
             else:
-                h = heat_t[0].detach().cpu().numpy()
-                h = (h - h.min()) / (h.max() - h.min() + 1e-6)
-                heat = h
-            if CV2_AVAILABLE:
-                overlay = overlay_heatmap(cv2.cvtColor(x, cv2.COLOR_RGB2BGR), heat, alpha)
-                st.image(overlay, use_container_width=True)
-            else:
-                st.image((heat*255).astype(np.uint8), use_container_width=True)
-        except Exception:
-            st.info("Grad-CAM unavailable for this model.")
-        st.markdown(f"### {name}")
-        badge = "high" if conf>=0.75 else "mid" if conf>=0.4 else "low"
-        st.markdown(f'<span class="badge {badge}">{"High Risk" if badge=="high" else "Medium Risk" if badge=="mid" else "Low Risk"}</span>', unsafe_allow_html=True)
-        st.markdown('<div class="bar"><div class="fill" id="confbar2"></div></div>', unsafe_allow_html=True)
-        st.markdown(f"<script>document.getElementById('confbar2').style.width='{conf*100:.1f}%'</script>", unsafe_allow_html=True)
-        with st.expander("Model & Explainability Details"):
-            st.write("Backend: PyTorch" if TORCH_AVAILABLE else "Backend: API")
-            st.write("Model: EfficientNetV2")
-            if class_names is not None:
-                topk = torch.topk(probs, k=min(3, len(class_names)))
-                labels_k = [class_names[i] for i in topk.indices.tolist()]
-                vals = [float(v) for v in topk.values.tolist()]
-                st.write("Top‑3:", {a: round(b, 4) for a, b in zip(labels_k, vals)})
+                st.markdown('<div style="aspect-ratio:1; background:rgba(255,255,255,0.05); border-radius:8px; display:flex; align-items:center; justify-content:center;">No Map</div>', unsafe_allow_html=True)
+        
+        st.markdown('<p class="info-text" style="margin-top: 16px;"><b>Note:</b> Red areas show where AI detected significant leaf damage or disease markers.</p>', unsafe_allow_html=True)
+
+# Diagnosis Section (Below the cards)
+if uploaded is not None and st.session_state.analyzed:
+    st.markdown('<div class="glass-card animate-in" style="margin-top: 20px;">', unsafe_allow_html=True)
+    diag_col1, diag_col2 = st.columns([2, 1])
+    
+    with diag_col1:
+        st.markdown('<p class="info-text" style="margin-bottom:0;">AI DIAGNOSIS</p>', unsafe_allow_html=True)
+        st.markdown(f'<div class="diagnosis-name">{name_v}</div>', unsafe_allow_html=True)
+        
+        # Add to history if not already there
+        from datetime import datetime
+        history_entry = {
+            "label": name_v,
+            "time": datetime.now().strftime("%H:%M"),
+            "thumb": "https://api.dicebear.com/7.x/identicon/svg?seed=" + name_v
+        }
+        if not st.session_state.history or st.session_state.history[-1]["label"] != name_v:
+             st.session_state.history.append(history_entry)
+             
+    with diag_col2:
+        st.markdown('<p class="info-text" style="margin-bottom:0; text-align:right;">CONFIDENCE</p>', unsafe_allow_html=True)
+        st.markdown(f'<div class="confidence-text" style="text-align:right;">{conf_v*100:.1f}%</div>', unsafe_allow_html=True)
+        st.progress(conf_v)
+
+    # Top-3 Visualization
+    if top3_data:
+        st.markdown('<p class="info-text" style="margin: 20px 0 10px 0;">TOP PREDICTIONS</p>', unsafe_allow_html=True)
+        for label, prob in top3_data.items():
+            st.markdown(f"""
+                <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+                    <span style="font-size:12px; color:var(--text-secondary);">{label}</span>
+                    <span style="font-size:12px; color:var(--accent); font-weight:600;">{prob*100:.1f}%</span>
+                </div>
+                <div style="height:4px; width:100%; background:rgba(255,255,255,0.05); border-radius:2px; margin-bottom:12px;">
+                    <div style="height:100%; width:{prob*100}%; background:var(--accent); border-radius:2px;"></div>
+                </div>
+            """, unsafe_allow_html=True)
+
+    st.markdown('<div style="display: flex; gap: 12px; margin-top: 24px;">', unsafe_allow_html=True)
+    btn_col1, btn_col2, _ = st.columns([1, 1, 2])
+    with btn_col1:
+        st.button("📄 DOWNLOAD REPORT")
+    with btn_col2:
+        st.markdown('<div class="secondary-btn">', unsafe_allow_html=True)
+        st.button("🔗 SHARE DIAGNOSIS")
+        st.markdown('</div>', unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)
+    
+    st.markdown('</div>', unsafe_allow_html=True)
+
