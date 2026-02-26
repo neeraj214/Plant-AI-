@@ -213,18 +213,15 @@ st.markdown(
     .severity-mid { background: rgba(249, 115, 22, 0.2); color: #F97316; border: 1px solid rgba(249, 115, 22, 0.3); }
     .severity-high { background: rgba(239, 68, 68, 0.2); color: #EF4444; border: 1px solid rgba(239, 68, 68, 0.3); }
 
-    .img-container {
-      aspect-ratio: 1 / 1;
-      width: 100%;
-      border-radius: 12px;
-      overflow: hidden;
+    /* Image Styling */
+    [data-testid="stImage"] img {
+      border-radius: 16px;
       border: 1px solid var(--card-border);
-      background: rgba(0,0,0,0.2);
+      transition: transform 0.3s ease;
     }
-    .img-container img {
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
+    [data-testid="stImage"] img:hover {
+      transform: scale(1.02);
+      border-color: var(--accent);
     }
     
     .info-text {
@@ -456,17 +453,13 @@ with col_right:
         res_col1, res_col2 = st.columns(2)
         with res_col1:
             st.markdown('<p class="info-text" style="text-align:center; margin-bottom:8px;">ORIGINAL INPUT</p>', unsafe_allow_html=True)
-            st.markdown('<div class="img-container">', unsafe_allow_html=True)
             st.image(pred_data["image"], use_container_width=True)
-            st.markdown('</div>', unsafe_allow_html=True)
         with res_col2:
             st.markdown('<p class="info-text" style="text-align:center; margin-bottom:8px;">AI ATTENTION MAP</p>', unsafe_allow_html=True)
-            st.markdown('<div class="img-container">', unsafe_allow_html=True)
             if pred_data["overlay"] is not None:
                 st.image(pred_data["overlay"], use_container_width=True)
             else:
-                st.markdown('<div style="width:100%; height:100%; display:flex; align-items:center; justify-content:center; background:rgba(255,255,255,0.05);">No Map Available</div>', unsafe_allow_html=True)
-            st.markdown('</div>', unsafe_allow_html=True)
+                st.markdown('<div style="width:100%; height:100%; min-height:200px; display:flex; align-items:center; justify-content:center; background:rgba(255,255,255,0.05); border-radius:16px; border:1px solid var(--card-border); color:var(--text-secondary);">No Map Available</div>', unsafe_allow_html=True)
         
         st.markdown('<p class="info-text" style="margin-top: 16px; text-align: center; font-size: 12px; opacity: 0.8;">The attention map highlights leaf regions prioritized by the EfficientNetV2 model for classification.</p>', unsafe_allow_html=True)
 
